@@ -1,0 +1,8 @@
+# cargo build artifacts
+/target
+# nix build artifacts
+result
+
+.pre-commit-config.yaml
+
+.direnv

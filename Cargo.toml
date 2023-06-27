@@ -1,0 +1,10 @@
+[package]
+name = "bevy-rpg-tutorial"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.10", features = [ "dynamic_linking", "wayland" ] }
+
+[profile.dev.packages."*"]
+opt-level = 3
