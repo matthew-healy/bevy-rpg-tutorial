@@ -5,15 +5,27 @@ use std::{
 
 use bevy::prelude::*;
 
-use crate::{ascii, TILE_SIZE};
+use crate::{
+    ascii,
+    util::{hide, show},
+    GameState, TILE_SIZE,
+};
 
 pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(create_simple);
+        app.add_startup_system(create_simple)
+            .add_system(show::<Map>.in_schedule(OnEnter(GameState::Overworld)))
+            .add_system(hide::<Map>.in_schedule(OnExit(GameState::Overworld)));
     }
 }
+
+#[derive(Component)]
+struct Map;
+
+#[derive(Component)]
+pub struct EncounterSpawner;
 
 #[derive(Component)]
 pub struct Collider;
@@ -32,9 +44,15 @@ fn create_simple(mut commands: Commands, ascii: Res<ascii::Sheet>) {
                     Color::rgb(0.9, 0.9, 0.9),
                     Vec3::new(x as f32 * TILE_SIZE, -(y as f32) * TILE_SIZE, 100.),
                 );
-                if char == '#' {
-                    commands.entity(tile).insert(Collider);
-                }
+                match char {
+                    '#' => {
+                        commands.entity(tile).insert(Collider);
+                    }
+                    '~' => {
+                        commands.entity(tile).insert(EncounterSpawner);
+                    }
+                    _ => (),
+                };
                 tiles.push(tile);
             }
         }
@@ -46,5 +64,6 @@ fn create_simple(mut commands: Commands, ascii: Res<ascii::Sheet>) {
         .insert(SpatialBundle::default())
         .insert(Transform::default())
         .insert(GlobalTransform::default())
+        .insert(Map)
         .push_children(&tiles);
 }

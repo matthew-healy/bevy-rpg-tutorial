@@ -1,20 +1,38 @@
 use bevy::{prelude::*, sprite::collide_aabb::collide};
 
-use crate::{ascii, tilemap, TILE_SIZE};
+use crate::{
+    ascii, fadeout,
+    tilemap::{self, EncounterSpawner},
+    util::hide,
+    GameState, TILE_SIZE,
+};
 
 pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(spawn)
-            .add_system(movement)
-            .add_system(camera_follow.after(movement));
+            .add_system(show_player.in_schedule(OnEnter(GameState::Overworld)))
+            .add_system(hide::<Player>.in_schedule(OnExit(GameState::Overworld)))
+            .add_system(encounter_check.in_set(OnUpdate(GameState::Overworld)))
+            .add_system(movement.in_set(OnUpdate(GameState::Overworld)))
+            .add_system(
+                camera_follow
+                    .after(movement)
+                    .in_set(OnUpdate(GameState::Overworld)),
+            );
     }
+}
+
+#[derive(Component, Reflect)]
+pub struct EncounterTracker {
+    timer: Timer,
 }
 
 #[derive(Component)]
 pub struct Player {
     speed: f32,
+    active: bool,
 }
 
 fn movement(
@@ -24,6 +42,10 @@ fn movement(
     time: Res<Time>,
 ) {
     let (player, mut transform) = player_query.single_mut();
+
+    if !player.active {
+        return;
+    }
 
     let normalised_movement = player.speed * TILE_SIZE * time.delta_seconds();
 
@@ -44,33 +66,57 @@ fn movement(
     }
 
     let target = transform.translation + Vec3::new(x_delta, 0., 0.);
-    if !would_collide(target, &wall_query) {
+    if !wall_query
+        .iter()
+        .any(|&wall| would_collide(target, wall.translation))
+    {
         transform.translation = target;
     }
 
     let target = transform.translation + Vec3::new(0., y_delta, 0.);
-    if !would_collide(target, &wall_query) {
+    if !wall_query
+        .iter()
+        .any(|&wall| would_collide(target, wall.translation))
+    {
         transform.translation = target;
     }
 }
 
-fn would_collide(
-    target_player_pos: Vec3,
-    wall_query: &Query<&Transform, (With<tilemap::Collider>, Without<Player>)>,
-) -> bool {
-    for wall_transform in wall_query.iter() {
-        let collision = collide(
-            target_player_pos,
-            Vec2::splat(TILE_SIZE * 0.9),
-            wall_transform.translation,
-            Vec2::splat(TILE_SIZE),
-        );
+fn would_collide(target_player_pos: Vec3, wall: Vec3) -> bool {
+    collide(
+        target_player_pos,
+        Vec2::splat(TILE_SIZE * 0.9),
+        wall,
+        Vec2::splat(TILE_SIZE),
+    )
+    .is_some()
+}
 
-        if collision.is_some() {
-            return true;
+fn encounter_check(
+    mut commands: Commands,
+    mut player_query: Query<(&mut Player, &mut EncounterTracker, &Transform)>,
+    encounter_query: Query<&Transform, (With<EncounterSpawner>, Without<Player>)>,
+    ascii: Res<ascii::Sheet>,
+    time: Res<Time>,
+) {
+    let (mut player, mut encounter_tracker, player_transform) = player_query.single_mut();
+    let player_pos = player_transform.translation;
+    if encounter_query
+        .iter()
+        .any(|&encounter_tile| would_collide(player_pos, encounter_tile.translation))
+    {
+        encounter_tracker.timer.tick(time.delta());
+        if encounter_tracker.timer.just_finished() {
+            player.active = false;
+            fadeout::create(&mut commands, GameState::Combat, &ascii)
         }
     }
-    false
+}
+
+fn show_player(mut query: Query<(&mut Player, &mut Visibility)>) {
+    let (mut player, mut visibility) = query.single_mut();
+    player.active = true;
+    *visibility = Visibility::Inherited;
 }
 
 fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {
@@ -86,11 +132,17 @@ fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {
         .entity(player)
         .insert(Name::new("Player"))
         // TODO: in the tutorial the speed is `3.`, but here I had to use a
-        // much larger number in order to get roughly the same movement speed.
-        // This seems likely to be related to the weirdness around `TILE_SIZE`,
+        // larger number in order to get roughly the same movement speed. This
+        // seems likely to be related to the weirdness around `TILE_SIZE`,
         // but I still don't know what exactly changed in bevy to require such
         // different numbers.
-        .insert(Player { speed: 7. });
+        .insert(Player {
+            speed: 6.,
+            active: true,
+        })
+        .insert(EncounterTracker {
+            timer: Timer::from_seconds(1., TimerMode::Repeating),
+        });
 
     let background = ascii::spawn_sprite(
         &mut commands,

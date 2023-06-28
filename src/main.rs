@@ -1,7 +1,10 @@
 mod ascii;
+mod combat;
 mod debug;
+mod fadeout;
 mod player;
 mod tilemap;
+mod util;
 
 use bevy::{prelude::*, render::camera::ScalingMode, window::WindowResolution};
 
@@ -13,9 +16,17 @@ pub const RESOLUTION: f32 = 16. / 9.;
 // doesn't work.
 pub const TILE_SIZE: f32 = 45.;
 
+#[derive(Debug, Default, Hash, PartialEq, Eq, Clone, Copy, States)]
+enum GameState {
+    #[default]
+    Overworld,
+    Combat,
+}
+
 fn main() {
     let height = 900.;
     App::new()
+        .add_state::<GameState>()
         .insert_resource(ClearColor(CLEAR))
         .add_plugins(
             DefaultPlugins
@@ -36,6 +47,8 @@ fn main() {
         .add_plugin(player::Plugin)
         .add_plugin(debug::Plugin)
         .add_plugin(tilemap::Plugin)
+        .add_plugin(combat::Plugin)
+        .add_plugin(fadeout::Plugin)
         .run();
 }
 
