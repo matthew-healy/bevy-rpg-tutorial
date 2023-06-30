@@ -6,6 +6,9 @@ edition = "2021"
 [dependencies]
 bevy = { version = "0.10", features = [ "dynamic_linking", "wayland" ] }
 bevy-inspector-egui = "0.18"
+bevy-kira-audio = "0.15"
+strum = "0.25"
+strum_macros = "0.25"
 
 [profile.dev.package."*"]
 opt-level = 3

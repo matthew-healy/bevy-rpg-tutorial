@@ -10,11 +10,7 @@ use bevy::{prelude::*, render::camera::ScalingMode, window::WindowResolution};
 
 pub const CLEAR: Color = Color::rgb(0.1, 0.1, 0.1);
 pub const RESOLUTION: f32 = 16. / 9.;
-// TODO: in the tutoral this is set to `0.1`, but if I do that here then we
-// end up with a sprite so small it's essentially invisible. Setting the size
-// to something else seems to work for now, but it'd be good to know why this
-// doesn't work.
-pub const TILE_SIZE: f32 = 45.;
+pub const TILE_SIZE: f32 = 0.1;
 
 #[derive(Debug, Default, Hash, PartialEq, Eq, Clone, Copy, States)]
 enum GameState {
@@ -55,11 +51,10 @@ fn main() {
 fn spawn_camera(mut commands: Commands) {
     let mut camera = Camera2dBundle::default();
 
-    camera.projection.area = Rect::new(-1. * RESOLUTION, -1., 1. * RESOLUTION, 1.);
-    // TODO:  I *think* this is the same as ScalingMode::None from the tutorial.
-    // That was replaced with ScalingMode::Fixed in Bevy 0.10, but that takes a
-    // width & height, which is surely just going to be the screen size?
-    camera.projection.scaling_mode = ScalingMode::WindowSize(1.0);
+    camera.projection.scaling_mode = ScalingMode::Fixed {
+        width: 2. * RESOLUTION,
+        height: 2.,
+    };
 
     commands.spawn(camera);
 }

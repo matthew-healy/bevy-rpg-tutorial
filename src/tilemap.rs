@@ -43,6 +43,7 @@ fn create_simple(mut commands: Commands, ascii: Res<ascii::Sheet>) {
                     char as usize,
                     Color::rgb(0.9, 0.9, 0.9),
                     Vec3::new(x as f32 * TILE_SIZE, -(y as f32) * TILE_SIZE, 100.),
+                    Vec3::splat(1.),
                 );
                 match char {
                     '#' => {

@@ -1,7 +1,7 @@
 use bevy::{prelude::*, sprite::collide_aabb::collide};
 
 use crate::{
-    ascii, fadeout,
+    ascii, combat, fadeout,
     tilemap::{self, EncounterSpawner},
     util::hide,
     GameState, TILE_SIZE,
@@ -126,19 +126,21 @@ fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {
         1,
         Color::rgb(0.3, 0.3, 0.9),
         Vec3::new(2. * TILE_SIZE, -2. * TILE_SIZE, 900.),
+        Vec3::splat(1.),
     );
 
     commands
         .entity(player)
         .insert(Name::new("Player"))
-        // TODO: in the tutorial the speed is `3.`, but here I had to use a
-        // larger number in order to get roughly the same movement speed. This
-        // seems likely to be related to the weirdness around `TILE_SIZE`,
-        // but I still don't know what exactly changed in bevy to require such
-        // different numbers.
         .insert(Player {
-            speed: 6.,
+            speed: 3.,
             active: true,
+        })
+        .insert(combat::Stats {
+            health: 10,
+            max_health: 10,
+            attack: 2,
+            defense: 1,
         })
         .insert(EncounterTracker {
             timer: Timer::from_seconds(1., TimerMode::Repeating),
@@ -150,6 +152,7 @@ fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {
         0,
         Color::rgb(0.5, 0.5, 0.5),
         Vec3::new(0., 0., -1.),
+        Vec3::splat(1.),
     );
 
     commands.entity(background).insert(Name::new("Background"));
