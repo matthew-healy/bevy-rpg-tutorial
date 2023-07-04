@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+
 use strum::EnumCount;
 
 use crate::{ascii, fadeout, player::Player, GameState, RESOLUTION, TILE_SIZE};
@@ -9,26 +10,54 @@ impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Stats>()
             .add_state::<State>()
-            .add_event::<FightEvent>()
+            .add_event::<Event>()
             .insert_resource(MenuSelection {
                 selected: MenuOption::Fight,
             })
-            .add_system(combat_camera.in_set(OnUpdate(GameState::Combat)))
-            .add_system(input.in_set(OnUpdate(GameState::Combat)))
-            .add_system(damage_calculation.in_set(OnUpdate(GameState::Combat)))
-            .add_system(highlight_selected_button.in_set(OnUpdate(GameState::Combat)))
-            .add_system(enemy_turn.in_set(OnUpdate(State::EnemyTurn)))
-            .add_system(spawn_enemy.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(despawn_enemy.in_schedule(OnExit(GameState::Combat)))
+            .insert_resource(AttackAnimation {
+                timer: Timer::from_seconds(0.7, TimerMode::Repeating),
+                flash_speed: 0.1,
+                shake: Shake {
+                    max_distance: 0.1,
+                    current_distance: 0.,
+                },
+            })
+            // camera
+            .add_system(camera.in_set(OnUpdate(GameState::Combat)))
+            // ui
             .add_system(spawn_menu.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(despawn_menu.in_schedule(OnExit(GameState::Combat)));
+            .add_system(spawn_player_health.in_schedule(OnEnter(GameState::Combat)))
+            .add_system(highlight_selected_button.in_set(OnUpdate(GameState::Combat)))
+            .add_system(despawn_menu.in_schedule(OnExit(GameState::Combat)))
+            .add_system(despawn_text.in_schedule(OnExit(GameState::Combat)))
+            // player
+            .add_system(player_goes_first.in_schedule(OnEnter(GameState::Combat)))
+            .add_system(spawn_player_health.in_schedule(OnEnter(GameState::Combat)))
+            .add_system(input.in_set(OnUpdate(GameState::Combat)))
+            // enemy
+            .add_system(spawn_enemy.in_schedule(OnEnter(GameState::Combat)))
+            .add_system(enemy_turn.in_set(OnUpdate(State::EnemyTurn)))
+            .add_system(despawn_enemy.in_schedule(OnExit(GameState::Combat)))
+            // damage calculation
+            .add_system(
+                // without the `after`s here we were somehow staying in
+                // `State::EnemyTurn` for an extra frame, causing the enemy to
+                // attack twice.
+                damage_calculation
+                    .after(enemy_turn)
+                    .after(input)
+                    .in_set(OnUpdate(GameState::Combat)),
+            )
+            // attack effects
+            .add_system(attack_effects.in_set(OnUpdate(State::PlayerAttack)))
+            .add_system(attack_effects.in_set(OnUpdate(State::EnemyAttack)));
     }
 }
 
 #[derive(Component)]
 struct Enemy;
 
-struct FightEvent {
+pub struct Event {
     target: Entity,
     damage_amount: isize,
     next_state: State,
@@ -59,14 +88,52 @@ pub struct MenuSelection {
 pub enum State {
     #[default]
     PlayerTurn,
+    PlayerAttack,
     EnemyTurn,
+    EnemyAttack,
     Exiting,
+}
+
+#[derive(Resource)]
+pub struct AttackAnimation {
+    timer: Timer,
+    flash_speed: f32,
+    shake: Shake,
+}
+
+pub struct Shake {
+    max_distance: f32,
+    current_distance: f32,
+}
+
+impl Shake {
+    fn tick(&mut self, progress: f32) {
+        use std::f32::consts::PI;
+
+        let progress_radians = progress * (2. * PI);
+        let shake_progress = progress_radians.sin();
+
+        self.current_distance = self.max_distance * shake_progress;
+    }
+}
+
+fn player_goes_first(mut combat_state: ResMut<NextState<State>>) {
+    combat_state.set(State::PlayerTurn);
+}
+
+fn camera(
+    mut camera_query: Query<&mut Transform, With<Camera>>,
+    attack_animation: Res<AttackAnimation>,
+) {
+    let mut camera_transform = camera_query.single_mut();
+    camera_transform.translation.x = attack_animation.shake.current_distance;
+    camera_transform.translation.y = 0.;
 }
 
 fn input(
     mut commands: Commands,
     keyboard: Res<Input<KeyCode>>,
-    mut fight_event_writer: EventWriter<FightEvent>,
+    mut event_writer: EventWriter<Event>,
     player_query: Query<&Stats, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
     mut menu_state: ResMut<MenuSelection>,
@@ -102,10 +169,10 @@ fn input(
             MenuOption::Fight => {
                 let player_stats = player_query.single();
                 let target = enemy_query.iter().next().unwrap();
-                fight_event_writer.send(FightEvent {
+                event_writer.send(Event {
                     target,
                     damage_amount: player_stats.attack,
-                    next_state: State::EnemyTurn,
+                    next_state: State::PlayerAttack,
                 })
             }
             MenuOption::Run => fadeout::create(&mut commands, GameState::Overworld, &ascii),
@@ -116,12 +183,12 @@ fn input(
 fn damage_calculation(
     mut commands: Commands,
     ascii: Res<ascii::Sheet>,
-    mut fight_event_reader: EventReader<FightEvent>,
-    text_query: Query<&ascii::Text>,
+    mut event_reader: EventReader<Event>,
+    text_query: Query<&Transform, With<Text>>,
     mut target_query: Query<(&Children, &mut Stats)>,
     mut state: ResMut<NextState<State>>,
 ) {
-    for event in fight_event_reader.iter() {
+    for event in event_reader.iter() {
         let (target_children, mut target_stats) = target_query
             .get_mut(event.target)
             .expect("Fighting target without stats!");
@@ -132,15 +199,20 @@ fn damage_calculation(
         );
 
         for child in target_children {
-            if text_query.get(*child).is_ok() {
+            if let Ok(transform) = text_query.get(*child) {
                 commands.entity(*child).despawn_recursive();
 
                 let new_health = ascii::spawn_text(
                     &mut commands,
                     &ascii,
                     &format!("Health: {}", target_stats.health),
-                    Vec3::new(-4.5 * TILE_SIZE, 2. * TILE_SIZE, 100.),
+                    transform.translation,
                 );
+                commands
+                    .entity(new_health)
+                    .insert(Text)
+                    // TODO: find a better solution to this
+                    .insert(Visibility::Visible);
                 commands.entity(event.target).add_child(new_health);
             }
         }
@@ -154,6 +226,65 @@ fn damage_calculation(
     }
 }
 
+fn enemy_turn(
+    mut event_writer: EventWriter<Event>,
+    enemy_query: Query<&Stats, With<Enemy>>,
+    player_query: Query<Entity, With<Player>>,
+) {
+    let player = player_query.single();
+    let enemy_stats = enemy_query.single();
+
+    event_writer.send(Event {
+        target: player,
+        damage_amount: enemy_stats.attack,
+        next_state: State::EnemyAttack,
+    })
+}
+
+fn attack_effects(
+    mut attack_animation: ResMut<AttackAnimation>,
+    time: Res<Time>,
+    mut enemy_graphics_query: Query<&mut Visibility, With<Enemy>>,
+    state: Res<bevy::prelude::State<State>>,
+    mut next_state: ResMut<NextState<State>>,
+) {
+    attack_animation.timer.tick(time.delta());
+
+    let mut enemy_visibility = enemy_graphics_query.iter_mut().next().unwrap();
+
+    match state.0 {
+        State::PlayerAttack => {
+            if attack_animation.timer.elapsed_secs() % attack_animation.flash_speed
+                > attack_animation.flash_speed / 2.
+            {
+                *enemy_visibility = Visibility::Hidden;
+            } else {
+                *enemy_visibility = Visibility::Inherited;
+            }
+        }
+        State::EnemyAttack => {
+            let progress = attack_animation.timer.percent();
+            attack_animation.shake.tick(progress);
+        }
+        s => unreachable!("{}", format!("unhandled attacking state: {s:?}")),
+    }
+
+    if attack_animation.timer.just_finished() {
+        // it's possible the previous frame of the animation left the enemy
+        // invisible.
+        *enemy_visibility = Visibility::Inherited;
+
+        match state.0 {
+            State::PlayerAttack => next_state.set(State::EnemyTurn),
+            State::EnemyAttack => next_state.set(State::PlayerTurn),
+            s => unreachable!("{}", format!("unhandled attack state: {s:?}")),
+        }
+    }
+}
+
+#[derive(Component)]
+struct Text;
+
 fn spawn_enemy(mut commands: Commands, ascii: Res<ascii::Sheet>) {
     let enemy_health = 3;
     let health_text = ascii::spawn_text(
@@ -162,6 +293,7 @@ fn spawn_enemy(mut commands: Commands, ascii: Res<ascii::Sheet>) {
         &format!("Health: {}", enemy_health),
         Vec3::new(-4.5 * TILE_SIZE, 2. * TILE_SIZE, 100.),
     );
+    commands.entity(health_text).insert(Text);
 
     let sprite = ascii::spawn_sprite(
         &mut commands,
@@ -191,11 +323,40 @@ fn despawn_enemy(mut commands: Commands, query: Query<Entity, With<Enemy>>) {
     }
 }
 
-fn combat_camera(mut camera_query: Query<&mut Transform, With<Camera>>) {
-    let mut camera_transform = camera_query.single_mut();
-    camera_transform.translation.x = 0.;
-    camera_transform.translation.y = 0.;
+// NOTE: using Player here is a bad idea, because the Player sprite is invisible
+// which means we need to explicitly make it visible...
+fn spawn_player_health(
+    mut commands: Commands,
+    ascii: Res<ascii::Sheet>,
+    player_query: Query<(Entity, &Stats, &Transform), With<Player>>,
+) {
+    let (player, stats, transform) = player_query.single();
+    let health_text = format!("Health: {}", stats.health);
+
+    let text = ascii::spawn_text(
+        &mut commands,
+        &ascii,
+        &health_text,
+        Vec3::new(-RESOLUTION + TILE_SIZE, -1. + TILE_SIZE, 0.) - transform.translation,
+    );
+
+    commands
+        .entity(text)
+        .insert(Text)
+        // since the Player's overworld avatar is hidden, we need to explicitly
+        // set the text to  visibile to prevent it from inheriting the parent's
+        // visibility.
+        .insert(Visibility::Visible);
+    commands.entity(player).add_child(text);
 }
+
+fn despawn_text(mut commands: Commands, query: Query<Entity, With<Text>>) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+// MENU & SELECTION
 
 fn spawn_menu(
     mut commands: Commands,
@@ -289,19 +450,4 @@ fn highlight_selected_button(
             }
         }
     }
-}
-
-fn enemy_turn(
-    mut fight_event_writer: EventWriter<FightEvent>,
-    enemy_query: Query<&Stats, With<Enemy>>,
-    player_query: Query<Entity, With<Player>>,
-) {
-    let player = player_query.single();
-    let enemy_stats = enemy_query.single();
-
-    fight_event_writer.send(FightEvent {
-        target: player,
-        damage_amount: enemy_stats.attack,
-        next_state: State::PlayerTurn,
-    })
 }

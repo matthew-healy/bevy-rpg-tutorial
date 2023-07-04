@@ -1,4 +1,5 @@
 mod ascii;
+mod audio;
 mod combat;
 mod debug;
 mod fadeout;
@@ -39,6 +40,7 @@ fn main() {
                 }),
         )
         .add_startup_system(spawn_camera)
+        .add_plugin(audio::Plugin)
         .add_plugin(ascii::Plugin)
         .add_plugin(player::Plugin)
         .add_plugin(debug::Plugin)

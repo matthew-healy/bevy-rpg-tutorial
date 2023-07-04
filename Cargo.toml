@@ -4,11 +4,33 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.10", features = [ "dynamic_linking", "wayland" ] }
 bevy-inspector-egui = "0.18"
-bevy-kira-audio = "0.15"
+bevy_kira_audio = { version = "0.15", features = ["wav"] }
 strum = "0.25"
 strum_macros = "0.25"
+
+[dependencies.bevy]
+version = "0.10"
+default-features = false
+features = [
+  # Default features
+  "animation",
+  "bevy_animation",
+  "bevy_asset",
+  "bevy_core_pipeline",
+  "bevy_render",
+  "bevy_scene",
+  "bevy_sprite",
+  "bevy_winit",
+  "filesystem_watcher",
+  "hdr",
+  "png",
+  "x11",
+
+  # Optional features
+  "dynamic_linking",
+  "wayland"
+]
 
 [profile.dev.package."*"]
 opt-level = 3
