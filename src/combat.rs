@@ -2,7 +2,12 @@ use bevy::prelude::*;
 
 use strum::EnumCount;
 
-use crate::{ascii, fadeout, player::Player, GameState, RESOLUTION, TILE_SIZE};
+use crate::{
+    ascii, fadeout,
+    graphics::{self, CharacterSheet},
+    player::Player,
+    GameState, RESOLUTION, TILE_SIZE,
+};
 
 pub struct Plugin;
 
@@ -53,7 +58,7 @@ impl bevy::prelude::Plugin for Plugin {
             // attack effects
             .add_systems(Update, attack_effects.run_if(in_state(State::PlayerAttack)))
             .add_systems(Update, attack_effects.run_if(in_state(State::EnemyAttack)))
-            .add_systems(OnEnter(State::Reward), reward)
+            .add_systems(OnEnter(State::Reward), (despawn_enemy, reward))
             .add_systems(Update, accept_reward.run_if(in_state(State::Reward)));
     }
 }
@@ -294,24 +299,17 @@ fn attack_effects(
 #[derive(Component)]
 struct Text;
 
-fn spawn_enemy(mut commands: Commands, ascii: Res<ascii::Sheet>) {
+fn spawn_enemy(mut commands: Commands, ascii: Res<ascii::Sheet>, characters: Res<CharacterSheet>) {
     let enemy_health = 3;
     let health_text = ascii::spawn_text(
         &mut commands,
         &ascii,
         &format!("Health: {}", enemy_health),
-        Vec3::new(-4.5 * TILE_SIZE, 2. * TILE_SIZE, 100.),
+        Vec3::new(-4.5 * TILE_SIZE, 0.5, 100.),
     );
     commands.entity(health_text).insert(Text);
 
-    let sprite = ascii::spawn_sprite(
-        &mut commands,
-        &ascii,
-        'b' as usize,
-        Color::rgb(0.8, 0.8, 0.8),
-        Vec3::new(0., 0.5, 100.),
-        Vec3::splat(1.),
-    );
+    let sprite = graphics::spawn_bat(&mut commands, &characters, Vec3::new(0., 0.3, 100.));
 
     commands
         .entity(sprite)

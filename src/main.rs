@@ -3,6 +3,7 @@ mod audio;
 mod combat;
 mod debug;
 mod fadeout;
+mod graphics;
 mod player;
 mod tilemap;
 mod util;
@@ -40,13 +41,14 @@ fn main() {
                 }),
         )
         .add_systems(Startup, spawn_camera)
-        .add_plugins(audio::Plugin)
         .add_plugins(ascii::Plugin)
-        .add_plugins(player::Plugin)
-        .add_plugins(debug::Plugin)
-        .add_plugins(tilemap::Plugin)
+        .add_plugins(audio::Plugin)
         .add_plugins(combat::Plugin)
+        .add_plugins(debug::Plugin)
         .add_plugins(fadeout::Plugin)
+        .add_plugins(graphics::Plugin)
+        .add_plugins(player::Plugin)
+        .add_plugins(tilemap::Plugin)
         .run();
 }
 
