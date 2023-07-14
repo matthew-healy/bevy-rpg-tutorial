@@ -36,7 +36,9 @@ pub struct EncounterTracker {
 #[derive(Component)]
 pub struct Player {
     speed: f32,
+    // TODO: is it enough to only run movement when we're in the Overworld state?
     active: bool,
+    pub experience: usize,
 }
 
 fn movement(
@@ -139,6 +141,7 @@ fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {
         .insert(Player {
             speed: 3.,
             active: true,
+            experience: 0,
         })
         .insert(combat::Stats {
             health: 10,

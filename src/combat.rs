@@ -25,10 +25,10 @@ impl bevy::prelude::Plugin for Plugin {
             // camera
             .add_systems(Update, camera.run_if(in_state(GameState::Combat)))
             // ui
-            .add_systems(OnEnter(GameState::Combat), spawn_menu)
+            .add_systems(OnEnter(GameState::Combat), menu::spawn)
             .add_systems(OnEnter(GameState::Combat), spawn_player_health)
-            .add_systems(Update, highlight_selected_button)
-            .add_systems(OnExit(GameState::Combat), despawn_menu)
+            .add_systems(Update, menu::button::highlight_selected)
+            .add_systems(OnExit(GameState::Combat), menu::despawn)
             .add_systems(OnExit(GameState::Combat), despawn_text)
             // player
             .add_systems(OnEnter(GameState::Combat), player_goes_first)
@@ -52,7 +52,9 @@ impl bevy::prelude::Plugin for Plugin {
             )
             // attack effects
             .add_systems(Update, attack_effects.run_if(in_state(State::PlayerAttack)))
-            .add_systems(Update, attack_effects.run_if(in_state(State::EnemyAttack)));
+            .add_systems(Update, attack_effects.run_if(in_state(State::EnemyAttack)))
+            .add_systems(OnEnter(State::Reward), reward)
+            .add_systems(Update, accept_reward.run_if(in_state(State::Reward)));
     }
 }
 
@@ -75,7 +77,7 @@ pub struct Stats {
 }
 
 #[derive(PartialEq, Eq, Component, Clone, Copy, strum_macros::EnumCount)]
-enum MenuOption {
+pub(crate) enum MenuOption {
     // NOTE: the order of items here is important as we do conversions to & from
     // `isize` in `input`. Be wary of this if changing.
     Fight,
@@ -94,6 +96,7 @@ pub enum State {
     PlayerAttack,
     EnemyTurn,
     EnemyAttack,
+    Reward,
     Exiting,
 }
 
@@ -214,15 +217,18 @@ fn damage_calculation(
                 commands
                     .entity(new_health)
                     .insert(Text)
-                    // TODO: find a better solution to this
+                    // TODO: find a better solution to this. context: the health
+                    //       is invisible because it's attached to the User
+                    //       entity, which is invisible because we've hidden its
+                    //       overworld avatar. It must be possible to  decouple
+                    //       these visibilities.
                     .insert(Visibility::Visible);
                 commands.entity(event.target).add_child(new_health);
             }
         }
 
         if target_stats.health == 0 {
-            fadeout::create(&mut commands, GameState::Overworld, &ascii);
-            state.set(State::Exiting);
+            state.set(State::Reward);
         } else {
             state.set(event.next_state);
         }
@@ -328,6 +334,7 @@ fn despawn_enemy(mut commands: Commands, query: Query<Entity, With<Enemy>>) {
 
 // NOTE: using Player here is a bad idea, because the Player sprite is invisible
 // which means we need to explicitly make it visible...
+// TODO: consider moving to a ui module
 fn spawn_player_health(
     mut commands: Commands,
     ascii: Res<ascii::Sheet>,
@@ -349,6 +356,7 @@ fn spawn_player_health(
         // since the Player's overworld avatar is hidden, we need to explicitly
         // set the text to  visibile to prevent it from inheriting the parent's
         // visibility.
+        // there's a TODO about this in `damage_calculation`
         .insert(Visibility::Visible);
     commands.entity(player).add_child(text);
 }
@@ -359,94 +367,129 @@ fn despawn_text(mut commands: Commands, query: Query<Entity, With<Text>>) {
     }
 }
 
-// MENU & SELECTION
-
-fn spawn_menu(
-    mut commands: Commands,
-    ascii: Res<ascii::Sheet>,
-    nineslice_indices: Res<ascii::NinesliceIndices>,
-) {
-    let box_height = 3.;
-    let box_center_y = -1.0 + box_height * TILE_SIZE / 2.;
-
-    let run_text = "Run";
-    let run_width = (run_text.len() + 2) as f32;
-    let run_center_x = RESOLUTION - (run_width * TILE_SIZE) / 2.;
-
-    spawn_button(
+fn reward(mut commands: Commands, ascii: Res<ascii::Sheet>, mut player_query: Query<&mut Player>) {
+    let exp_reward = 10;
+    let reward_text = format!("Earned {} exp", exp_reward);
+    let text = ascii::spawn_text(
         &mut commands,
         &ascii,
-        &nineslice_indices,
-        Vec3::new(run_center_x, box_center_y, 100.),
-        run_text,
-        MenuOption::Run,
-        Vec2::new(run_width, box_height),
+        &reward_text,
+        Vec3::new(-((reward_text.len() / 2) as f32 * TILE_SIZE), 0., 0.),
     );
-
-    let fight_text = "Fight";
-    let fight_width = (fight_text.len() + 2) as f32;
-    let fight_center_x = RESOLUTION - (run_width * TILE_SIZE) - (fight_width * TILE_SIZE / 2.);
-
-    spawn_button(
-        &mut commands,
-        &ascii,
-        &nineslice_indices,
-        Vec3::new(fight_center_x, box_center_y, 100.),
-        fight_text,
-        MenuOption::Fight,
-        Vec2::new(fight_width, box_height),
-    );
+    commands.entity(text).insert(Text);
+    player_query.single_mut().experience += exp_reward;
 }
 
-fn despawn_menu(mut commands: Commands, query: Query<Entity, With<MenuOption>>) {
-    for button in query.iter() {
-        commands.entity(button).despawn_recursive();
+fn accept_reward(mut commands: Commands, ascii: Res<ascii::Sheet>, keyboard: Res<Input<KeyCode>>) {
+    if keyboard.just_pressed(KeyCode::Space) {
+        fadeout::create(&mut commands, GameState::Overworld, &ascii)
     }
 }
 
-fn spawn_button(
-    commands: &mut Commands,
-    ascii: &ascii::Sheet,
-    indices: &ascii::NinesliceIndices,
-    translation: Vec3,
-    text: &str,
-    id: MenuOption,
-    size: Vec2,
-) -> Entity {
-    let nineslice = ascii::spawn_nineslice(commands, ascii, indices, size.x, size.y);
+mod menu {
+    use bevy::prelude::*;
 
-    let x_offset = (-size.x / 2. + 1.5) * TILE_SIZE;
-    let text = ascii::spawn_text(commands, ascii, text, Vec3::new(x_offset, 0., 0.));
+    use crate::{ascii, RESOLUTION, TILE_SIZE};
 
-    commands
-        .spawn_empty()
-        .insert(SpatialBundle::default())
-        .insert(Transform {
-            translation,
-            ..Default::default()
-        })
-        .insert(Name::new("Button"))
-        .insert(id)
-        .add_child(text)
-        .add_child(nineslice)
-        .id()
-}
+    use super::MenuOption;
 
-fn highlight_selected_button(
-    menu_selection: Res<MenuSelection>,
-    button_query: Query<(&Children, &MenuOption)>,
-    nineslice_query: Query<&Children, With<ascii::Nineslice>>,
-    mut sprites_query: Query<&mut TextureAtlasSprite>,
-) {
-    for (button_children, button_id) in button_query.iter() {
-        for button_child in button_children.iter() {
-            if let Ok(nineslice_children) = nineslice_query.get(*button_child) {
-                for nineslice_child in nineslice_children.iter() {
-                    if let Ok(mut sprite) = sprites_query.get_mut(*nineslice_child) {
-                        if menu_selection.selected == *button_id {
-                            sprite.color = Color::RED;
-                        } else {
-                            sprite.color = Color::WHITE;
+    pub(crate) fn spawn(
+        mut commands: Commands,
+        ascii: Res<ascii::Sheet>,
+        nineslice_indices: Res<ascii::NinesliceIndices>,
+    ) {
+        let box_height = 3.;
+        let box_center_y = -1.0 + box_height * TILE_SIZE / 2.;
+
+        let run_text = "Run";
+        let run_width = (run_text.len() + 2) as f32;
+        let run_center_x = RESOLUTION - (run_width * TILE_SIZE) / 2.;
+
+        button::spawn(
+            &mut commands,
+            &ascii,
+            &nineslice_indices,
+            Vec3::new(run_center_x, box_center_y, 100.),
+            run_text,
+            MenuOption::Run,
+            Vec2::new(run_width, box_height),
+        );
+
+        let fight_text = "Fight";
+        let fight_width = (fight_text.len() + 2) as f32;
+        let fight_center_x = RESOLUTION - (run_width * TILE_SIZE) - (fight_width * TILE_SIZE / 2.);
+
+        button::spawn(
+            &mut commands,
+            &ascii,
+            &nineslice_indices,
+            Vec3::new(fight_center_x, box_center_y, 100.),
+            fight_text,
+            MenuOption::Fight,
+            Vec2::new(fight_width, box_height),
+        );
+    }
+
+    pub(crate) fn despawn(mut commands: Commands, query: Query<Entity, With<MenuOption>>) {
+        for button in query.iter() {
+            commands.entity(button).despawn_recursive();
+        }
+    }
+
+    pub(crate) mod button {
+        use bevy::prelude::*;
+
+        use crate::{
+            ascii,
+            combat::{MenuOption, MenuSelection},
+            TILE_SIZE,
+        };
+
+        pub(crate) fn spawn(
+            commands: &mut Commands,
+            ascii: &ascii::Sheet,
+            indices: &ascii::NinesliceIndices,
+            translation: Vec3,
+            text: &str,
+            id: MenuOption,
+            size: Vec2,
+        ) -> Entity {
+            let nineslice = ascii::spawn_nineslice(commands, ascii, indices, size.x, size.y);
+
+            let x_offset = (-size.x / 2. + 1.5) * TILE_SIZE;
+            let text = ascii::spawn_text(commands, ascii, text, Vec3::new(x_offset, 0., 0.));
+
+            commands
+                .spawn_empty()
+                .insert(SpatialBundle::default())
+                .insert(Transform {
+                    translation,
+                    ..Default::default()
+                })
+                .insert(Name::new("Button"))
+                .insert(id)
+                .add_child(text)
+                .add_child(nineslice)
+                .id()
+        }
+
+        pub(crate) fn highlight_selected(
+            menu_selection: Res<MenuSelection>,
+            button_query: Query<(&Children, &MenuOption)>,
+            nineslice_query: Query<&Children, With<ascii::Nineslice>>,
+            mut sprites_query: Query<&mut TextureAtlasSprite>,
+        ) {
+            for (button_children, button_id) in button_query.iter() {
+                for button_child in button_children.iter() {
+                    if let Ok(nineslice_children) = nineslice_query.get(*button_child) {
+                        for nineslice_child in nineslice_children.iter() {
+                            if let Ok(mut sprite) = sprites_query.get_mut(*nineslice_child) {
+                                if menu_selection.selected == *button_id {
+                                    sprite.color = Color::RED;
+                                } else {
+                                    sprite.color = Color::WHITE;
+                                }
+                            }
                         }
                     }
                 }

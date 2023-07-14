@@ -17,6 +17,7 @@ impl bevy::prelude::Plugin for Plugin {
             .add_systems(OnExit(GameState::Overworld), pause::<BgTrack>)
             .add_systems(OnEnter(GameState::Combat), start_combat_track)
             .add_systems(Update, play_hit.run_if(in_state(GameState::Combat)))
+            .add_systems(OnEnter(combat::State::Reward), play_reward)
             .add_systems(OnExit(GameState::Combat), stop::<CombatTrack>);
     }
 }
@@ -100,4 +101,8 @@ fn play_hit(
     if cnt > 0 {
         audio.play(state.handles.hit.clone());
     }
+}
+
+fn play_reward(audio: Res<AudioChannel<SfxTrack>>, state: Res<State>) {
+    audio.play(state.handles.reward.clone());
 }
