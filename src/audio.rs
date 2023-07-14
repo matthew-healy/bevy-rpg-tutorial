@@ -7,17 +7,17 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(AudioPlugin)
+        app.add_plugins(AudioPlugin)
             .add_audio_channel::<BgTrack>()
             .add_audio_channel::<CombatTrack>()
             .add_audio_channel::<SfxTrack>()
-            .add_startup_system(load.in_base_set(StartupSet::PreStartup))
-            .add_startup_system(start_bgm)
-            .add_system(resume::<BgTrack>.in_schedule(OnEnter(GameState::Overworld)))
-            .add_system(pause::<BgTrack>.in_schedule(OnExit(GameState::Overworld)))
-            .add_system(start_combat_track.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(play_hit.in_set(OnUpdate(GameState::Combat)))
-            .add_system(stop::<CombatTrack>.in_schedule(OnExit(GameState::Combat)));
+            .add_systems(PreStartup, load)
+            .add_systems(Startup, start_bgm)
+            .add_systems(OnEnter(GameState::Overworld), resume::<BgTrack>)
+            .add_systems(OnExit(GameState::Overworld), pause::<BgTrack>)
+            .add_systems(OnEnter(GameState::Combat), start_combat_track)
+            .add_systems(Update, play_hit.run_if(in_state(GameState::Combat)))
+            .add_systems(OnExit(GameState::Combat), stop::<CombatTrack>);
     }
 }
 

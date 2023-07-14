@@ -6,7 +6,7 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(load.in_base_set(StartupSet::PreStartup))
+        app.add_systems(PreStartup, load)
             .insert_resource(NinesliceIndices {
                 center: 2 * 16,
                 upper_left: 13 * 16 + 10,

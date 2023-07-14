@@ -6,7 +6,7 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_system(run);
+        app.add_systems(Update, run);
     }
 }
 

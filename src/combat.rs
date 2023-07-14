@@ -23,40 +23,43 @@ impl bevy::prelude::Plugin for Plugin {
                 },
             })
             // camera
-            .add_system(camera.in_set(OnUpdate(GameState::Combat)))
+            .add_systems(Update, camera.run_if(in_state(GameState::Combat)))
             // ui
-            .add_system(spawn_menu.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(spawn_player_health.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(highlight_selected_button.in_set(OnUpdate(GameState::Combat)))
-            .add_system(despawn_menu.in_schedule(OnExit(GameState::Combat)))
-            .add_system(despawn_text.in_schedule(OnExit(GameState::Combat)))
+            .add_systems(OnEnter(GameState::Combat), spawn_menu)
+            .add_systems(OnEnter(GameState::Combat), spawn_player_health)
+            .add_systems(Update, highlight_selected_button)
+            .add_systems(OnExit(GameState::Combat), despawn_menu)
+            .add_systems(OnExit(GameState::Combat), despawn_text)
             // player
-            .add_system(player_goes_first.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(spawn_player_health.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(input.in_set(OnUpdate(GameState::Combat)))
+            .add_systems(OnEnter(GameState::Combat), player_goes_first)
+            .add_systems(OnEnter(GameState::Combat), spawn_player_health)
+            .add_systems(Update, input.run_if(in_state(GameState::Combat)))
             // enemy
-            .add_system(spawn_enemy.in_schedule(OnEnter(GameState::Combat)))
-            .add_system(enemy_turn.in_set(OnUpdate(State::EnemyTurn)))
-            .add_system(despawn_enemy.in_schedule(OnExit(GameState::Combat)))
+            .add_systems(OnEnter(GameState::Combat), spawn_enemy)
+            .add_systems(Update, enemy_turn.run_if(in_state(State::EnemyTurn)))
+            .add_systems(OnExit(GameState::Combat), despawn_enemy)
             // damage calculation
-            .add_system(
+            .add_systems(
+                Update,
                 // without the `after`s here we were somehow staying in
                 // `State::EnemyTurn` for an extra frame, causing the enemy to
                 // attack twice.
+                // TODO: check if this is still the case
                 damage_calculation
                     .after(enemy_turn)
                     .after(input)
-                    .in_set(OnUpdate(GameState::Combat)),
+                    .run_if(in_state(GameState::Combat)),
             )
             // attack effects
-            .add_system(attack_effects.in_set(OnUpdate(State::PlayerAttack)))
-            .add_system(attack_effects.in_set(OnUpdate(State::EnemyAttack)));
+            .add_systems(Update, attack_effects.run_if(in_state(State::PlayerAttack)))
+            .add_systems(Update, attack_effects.run_if(in_state(State::EnemyAttack)));
     }
 }
 
 #[derive(Component)]
 struct Enemy;
 
+#[derive(bevy::prelude::Event)]
 pub struct Event {
     target: Entity,
     damage_amount: isize,
@@ -140,7 +143,7 @@ fn input(
     ascii: Res<ascii::Sheet>,
     combat_state: Res<bevy::prelude::State<State>>,
 ) {
-    if combat_state.0 != State::PlayerTurn {
+    if combat_state.get() != &State::PlayerTurn {
         return;
     }
 
@@ -252,7 +255,7 @@ fn attack_effects(
 
     let mut enemy_visibility = enemy_graphics_query.iter_mut().next().unwrap();
 
-    match state.0 {
+    match state.get() {
         State::PlayerAttack => {
             if attack_animation.timer.elapsed_secs() % attack_animation.flash_speed
                 > attack_animation.flash_speed / 2.
@@ -274,7 +277,7 @@ fn attack_effects(
         // invisible.
         *enemy_visibility = Visibility::Inherited;
 
-        match state.0 {
+        match state.get() {
             State::PlayerAttack => next_state.set(State::EnemyTurn),
             State::EnemyAttack => next_state.set(State::PlayerTurn),
             s => unreachable!("{}", format!("unhandled attack state: {s:?}")),

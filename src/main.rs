@@ -39,14 +39,14 @@ fn main() {
                     ..Default::default()
                 }),
         )
-        .add_startup_system(spawn_camera)
-        .add_plugin(audio::Plugin)
-        .add_plugin(ascii::Plugin)
-        .add_plugin(player::Plugin)
-        .add_plugin(debug::Plugin)
-        .add_plugin(tilemap::Plugin)
-        .add_plugin(combat::Plugin)
-        .add_plugin(fadeout::Plugin)
+        .add_systems(Startup, spawn_camera)
+        .add_plugins(audio::Plugin)
+        .add_plugins(ascii::Plugin)
+        .add_plugins(player::Plugin)
+        .add_plugins(debug::Plugin)
+        .add_plugins(tilemap::Plugin)
+        .add_plugins(combat::Plugin)
+        .add_plugins(fadeout::Plugin)
         .run();
 }
 

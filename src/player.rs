@@ -11,15 +11,19 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(spawn)
-            .add_system(show_player.in_schedule(OnEnter(GameState::Overworld)))
-            .add_system(hide::<Player>.in_schedule(OnExit(GameState::Overworld)))
-            .add_system(encounter_check.in_set(OnUpdate(GameState::Overworld)))
-            .add_system(movement.in_set(OnUpdate(GameState::Overworld)))
-            .add_system(
+        app.add_systems(Startup, spawn)
+            .add_systems(OnEnter(GameState::Overworld), show_player)
+            .add_systems(OnExit(GameState::Overworld), hide::<Player>)
+            .add_systems(
+                Update,
+                encounter_check.run_if(in_state(GameState::Overworld)),
+            )
+            .add_systems(Update, movement.run_if(in_state(GameState::Overworld)))
+            .add_systems(
+                Update,
                 camera_follow
                     .after(movement)
-                    .in_set(OnUpdate(GameState::Overworld)),
+                    .run_if(in_state(GameState::Overworld)),
             );
     }
 }
