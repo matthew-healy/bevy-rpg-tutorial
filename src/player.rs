@@ -11,7 +11,7 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn)
+        app.add_systems(OnEnter(GameState::Overworld), spawn.run_if(run_once()))
             .add_systems(OnEnter(GameState::Overworld), show_player)
             .add_systems(OnExit(GameState::Overworld), hide::<Player>)
             .add_systems(
@@ -120,9 +120,10 @@ fn encounter_check(
 }
 
 fn show_player(mut query: Query<(&mut Player, &mut Visibility)>) {
-    let (mut player, mut visibility) = query.single_mut();
-    player.active = true;
-    *visibility = Visibility::Inherited;
+    if let Ok((mut player, mut visibility)) = query.get_single_mut() {
+        player.active = true;
+        *visibility = Visibility::Inherited;
+    }
 }
 
 fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {

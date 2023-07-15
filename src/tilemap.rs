@@ -15,9 +15,12 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, create_simple)
-            .add_systems(OnEnter(GameState::Overworld), show::<Map>)
-            .add_systems(OnExit(GameState::Overworld), hide::<Map>);
+        app.add_systems(
+            OnEnter(GameState::Overworld),
+            create_simple.run_if(run_once()),
+        )
+        .add_systems(OnEnter(GameState::Overworld), show::<Map>)
+        .add_systems(OnExit(GameState::Overworld), hide::<Map>);
     }
 }
 

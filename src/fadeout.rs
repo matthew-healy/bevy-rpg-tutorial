@@ -6,7 +6,7 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, run);
+        app.add_systems(Update, (sprite, ui));
     }
 }
 
@@ -42,7 +42,7 @@ pub(crate) fn create(commands: &mut Commands, next_state: GameState, ascii: &Res
         .insert(Name::new("Fadeout"));
 }
 
-fn run(
+fn sprite(
     mut commands: Commands,
     mut query: Query<(Entity, &mut ScreenFade, &mut TextureAtlasSprite)>,
     mut state: ResMut<NextState<GameState>>,
@@ -64,6 +64,24 @@ fn run(
 
         if fade.timer.just_finished() {
             commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn ui(
+    fade: Query<&ScreenFade>,
+    mut background_color: Query<&mut BackgroundColor>,
+    mut text: Query<&mut Text>,
+) {
+    if let Some(fade) = fade.iter().next() {
+        for mut color in background_color.iter_mut() {
+            color.0.set_a(1.0 - fade.alpha);
+        }
+
+        for mut text in text.iter_mut() {
+            for section in text.sections.iter_mut() {
+                section.style.color.set_a(1.0 - fade.alpha);
+            }
         }
     }
 }

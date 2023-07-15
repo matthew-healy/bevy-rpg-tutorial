@@ -5,6 +5,7 @@ mod debug;
 mod fadeout;
 mod graphics;
 mod player;
+mod start_menu;
 mod tilemap;
 mod util;
 
@@ -17,6 +18,7 @@ pub const TILE_SIZE: f32 = 0.1;
 #[derive(Debug, Default, Hash, PartialEq, Eq, Clone, Copy, States)]
 enum GameState {
     #[default]
+    StartMenu,
     Overworld,
     Combat,
 }
@@ -48,6 +50,7 @@ fn main() {
         .add_plugins(fadeout::Plugin)
         .add_plugins(graphics::Plugin)
         .add_plugins(player::Plugin)
+        .add_plugins(start_menu::Plugin)
         .add_plugins(tilemap::Plugin)
         .run();
 }
