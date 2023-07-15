@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy_kira_audio::prelude::*;
 
 use crate::{combat, GameState};
 
@@ -7,102 +6,85 @@ pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(AudioPlugin)
-            .add_audio_channel::<BgTrack>()
-            .add_audio_channel::<CombatTrack>()
-            .add_audio_channel::<SfxTrack>()
-            .add_systems(PreStartup, load)
-            .add_systems(Startup, start_bgm)
-            .add_systems(OnEnter(GameState::Overworld), resume::<BgTrack>)
-            .add_systems(OnExit(GameState::Overworld), pause::<BgTrack>)
-            .add_systems(OnEnter(GameState::Combat), start_combat_track)
-            .add_systems(Update, play_hit.run_if(in_state(GameState::Combat)))
-            .add_systems(OnEnter(combat::State::Reward), play_reward)
-            .add_systems(OnExit(GameState::Combat), stop::<CombatTrack>);
+        app.add_systems(Startup, OverworldMusic::load)
+            .add_systems(OnEnter(GameState::Overworld), OverworldMusic::play)
+            .add_systems(OnExit(GameState::Overworld), OverworldMusic::pause)
+            .add_systems(OnEnter(GameState::Combat), CombatMusic::load)
+            .add_systems(Update, HitSfx::load.run_if(on_event::<combat::Event>()))
+            .add_systems(OnEnter(combat::State::Reward), RewardSfx::load)
+            .add_systems(OnExit(GameState::Combat), CombatMusic::stop);
     }
 }
 
-#[derive(Resource)]
-struct State {
-    handles: Handles,
+trait Track: Component + Sized {
+    fn load(
+        commands: Commands,
+        asset_server: Res<AssetServer>,
+        query: Query<&AudioSink, With<Self>>,
+    );
+
+    fn play(query: Query<&AudioSink, With<Self>>);
+
+    fn pause(query: Query<&AudioSink, With<Self>>);
+
+    fn stop(query: Query<&AudioSink, With<Self>>);
 }
 
-struct Handles {
-    bgm: Handle<AudioSource>,
-    combat: Handle<AudioSource>,
-    hit: Handle<AudioSource>,
-    reward: Handle<AudioSource>,
-}
+macro_rules! audio_component {
+    ( $ty: ident, $asset_name: tt, $playback_setting: expr) => {
+        #[derive(Component)]
+        struct $ty;
 
-#[derive(Resource)]
-struct SfxTrack;
+        impl Track for $ty {
+            fn load(
+                mut commands: Commands,
+                asset_server: Res<AssetServer>,
+                query: Query<&AudioSink, With<$ty>>,
+            ) {
+                use bevy::ecs::query::QuerySingleError;
+                match query.get_single() {
+                    Err(QuerySingleError::NoEntities(_)) => {
+                        use bevy::audio::Volume;
+                        commands.spawn((
+                            AudioBundle {
+                                source: asset_server.load($asset_name),
+                                settings: $playback_setting.with_volume(Volume::new_relative(0.6)),
+                            },
+                            $ty,
+                        ));
+                    }
+                    Ok(_) => (),
+                    Err(QuerySingleError::MultipleEntities(_)) => {
+                        unreachable!("we should only have one of each track loaded at a time")
+                    }
+                }
+            }
 
-#[derive(Resource)]
-struct BgTrack;
+            fn play(query: Query<&AudioSink, With<$ty>>) {
+                if let Ok(sink) = query.get_single() {
+                    sink.play();
+                }
+            }
 
-#[derive(Resource)]
-struct CombatTrack;
+            fn pause(query: Query<&AudioSink, With<$ty>>) {
+                if let Ok(sink) = query.get_single() {
+                    sink.pause();
+                }
+            }
 
-fn load(
-    mut commands: Commands,
-    bg_channel: Res<AudioChannel<BgTrack>>,
-    combat_channel: Res<AudioChannel<CombatTrack>>,
-    sfx_channel: Res<AudioChannel<SfxTrack>>,
-    assets: Res<AssetServer>,
-) {
-    let handles = {
-        let bgm = assets.load("bip-bop.ogg");
-        let combat = assets.load("ganxta.ogg");
-        let hit = assets.load("hit.wav");
-        let reward = assets.load("reward.wav");
-
-        Handles {
-            bgm,
-            combat,
-            hit,
-            reward,
+            fn stop(query: Query<&AudioSink, With<$ty>>) {
+                if let Ok(sink) = query.get_single() {
+                    sink.stop();
+                }
+            }
         }
     };
-
-    commands.insert_resource(State { handles });
-
-    let volume = 0.5;
-    bg_channel.set_volume(volume);
-    combat_channel.set_volume(volume);
-    sfx_channel.set_volume(volume);
 }
 
-fn start_bgm(audio: Res<AudioChannel<BgTrack>>, state: Res<State>) {
-    audio.play(state.handles.bgm.clone()).looped();
-}
+audio_component!(OverworldMusic, "bip-bop.ogg", PlaybackSettings::LOOP);
 
-fn resume<T: Resource>(audio: Res<AudioChannel<T>>) {
-    audio.resume();
-}
+audio_component!(CombatMusic, "ganxta.ogg", PlaybackSettings::LOOP);
 
-fn pause<T: Resource>(audio: Res<AudioChannel<T>>) {
-    audio.pause();
-}
+audio_component!(HitSfx, "hit.wav", PlaybackSettings::REMOVE);
 
-fn stop<T: Resource>(audio: Res<AudioChannel<T>>) {
-    audio.stop();
-}
-
-fn start_combat_track(audio: Res<AudioChannel<CombatTrack>>, state: Res<State>) {
-    audio.play(state.handles.combat.clone()).looped();
-}
-
-fn play_hit(
-    audio: Res<AudioChannel<SfxTrack>>,
-    state: Res<State>,
-    mut event_reader: EventReader<combat::Event>,
-) {
-    let cnt = event_reader.iter().count();
-    if cnt > 0 {
-        audio.play(state.handles.hit.clone());
-    }
-}
-
-fn play_reward(audio: Res<AudioChannel<SfxTrack>>, state: Res<State>) {
-    audio.play(state.handles.reward.clone());
-}
+audio_component!(RewardSfx, "reward.wav", PlaybackSettings::REMOVE);

@@ -6,30 +6,14 @@ edition = "2021"
 [dependencies]
 # TODO: bevy-inspector-gui hasn't yet been updated for bevy 0.11. add it back
 #       once it has.
-bevy_kira_audio = { version = "0.16", features = ["wav"] }
 strum = "0.25"
 strum_macros = "0.25"
 
 [dependencies.bevy]
 version = "0.11"
-default-features = false
 features = [
-  # Default features
-  "animation",
-  "bevy_animation",
-  "bevy_asset",
-  "bevy_core_pipeline",
-  "bevy_render",
-  "bevy_scene",
-  "bevy_sprite",
-  "bevy_winit",
-  "filesystem_watcher",
-  "hdr",
-  "png",
-  "x11",
-
-  # Optional features
   "dynamic_linking",
+  "wav",
   "wayland"
 ]
 
