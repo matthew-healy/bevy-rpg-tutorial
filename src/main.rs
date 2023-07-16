@@ -4,6 +4,7 @@ mod combat;
 mod debug;
 mod fadeout;
 mod graphics;
+mod npc;
 mod player;
 mod start_menu;
 mod tilemap;
@@ -49,6 +50,7 @@ fn main() {
         .add_plugins(debug::Plugin)
         .add_plugins(fadeout::Plugin)
         .add_plugins(graphics::Plugin)
+        .add_plugins(npc::Plugin)
         .add_plugins(player::Plugin)
         .add_plugins(start_menu::Plugin)
         .add_plugins(tilemap::Plugin)

@@ -378,8 +378,14 @@ fn reward(mut commands: Commands, ascii: Res<ascii::Sheet>, mut player_query: Qu
     player_query.single_mut().experience += exp_reward;
 }
 
-fn accept_reward(mut commands: Commands, ascii: Res<ascii::Sheet>, keyboard: Res<Input<KeyCode>>) {
+fn accept_reward(
+    mut commands: Commands,
+    ascii: Res<ascii::Sheet>,
+    keyboard: Res<Input<KeyCode>>,
+    mut next_state: ResMut<NextState<State>>,
+) {
     if keyboard.just_pressed(KeyCode::Space) {
+        next_state.set(State::Exiting);
         fadeout::create(&mut commands, GameState::Overworld, &ascii)
     }
 }

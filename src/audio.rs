@@ -12,7 +12,7 @@ impl bevy::prelude::Plugin for Plugin {
             .add_systems(OnEnter(GameState::Combat), CombatMusic::load)
             .add_systems(Update, HitSfx::load.run_if(on_event::<combat::Event>()))
             .add_systems(OnEnter(combat::State::Reward), RewardSfx::load)
-            .add_systems(OnExit(GameState::Combat), CombatMusic::stop);
+            .add_systems(OnExit(GameState::Combat), CombatMusic::despawn);
     }
 }
 
@@ -27,7 +27,7 @@ trait Track: Component + Sized {
 
     fn pause(query: Query<&AudioSink, With<Self>>);
 
-    fn stop(query: Query<&AudioSink, With<Self>>);
+    fn despawn(commands: Commands, query: Query<(Entity, &AudioSink), With<Self>>);
 }
 
 macro_rules! audio_component {
@@ -53,7 +53,9 @@ macro_rules! audio_component {
                             $ty,
                         ));
                     }
-                    Ok(_) => (),
+                    Ok(_) => {
+                        println!("Got single...")
+                    }
                     Err(QuerySingleError::MultipleEntities(_)) => {
                         unreachable!("we should only have one of each track loaded at a time")
                     }
@@ -72,9 +74,10 @@ macro_rules! audio_component {
                 }
             }
 
-            fn stop(query: Query<&AudioSink, With<$ty>>) {
-                if let Ok(sink) = query.get_single() {
+            fn despawn(mut commands: Commands, query: Query<(Entity, &AudioSink), With<$ty>>) {
+                if let Ok((entity, sink)) = query.get_single() {
                     sink.stop();
+                    commands.entity(entity).despawn_recursive();
                 }
             }
         }

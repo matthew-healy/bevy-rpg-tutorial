@@ -6,7 +6,7 @@ use std::{
 use bevy::prelude::*;
 
 use crate::{
-    ascii,
+    ascii, npc,
     util::{hide, show},
     GameState, TILE_SIZE,
 };
@@ -40,17 +40,29 @@ fn create_simple(mut commands: Commands, ascii: Res<ascii::Sheet>) {
     for (y, line) in BufReader::new(file).lines().enumerate() {
         if let Ok(line) = line {
             for (x, char) in line.chars().enumerate() {
+                let color = match char {
+                    '#' => Color::rgb(0.7, 0.7, 0.7),
+                    '@' => Color::rgb(0.5, 0.5, 0.2),
+                    '~' => Color::rgb(0.2, 0.9, 0.2),
+                    _ => Color::rgb(0.9, 0.9, 0.9),
+                };
                 let tile = ascii::spawn_sprite(
                     &mut commands,
                     &ascii,
                     char as usize,
-                    Color::rgb(0.9, 0.9, 0.9),
+                    color,
                     Vec3::new(x as f32 * TILE_SIZE, -(y as f32) * TILE_SIZE, 100.),
                     Vec3::splat(1.),
                 );
                 match char {
                     '#' => {
                         commands.entity(tile).insert(Collider);
+                    }
+                    '@' => {
+                        commands
+                            .entity(tile)
+                            .insert(Collider)
+                            .insert(npc::Role::Healer);
                     }
                     '~' => {
                         commands.entity(tile).insert(EncounterSpawner);

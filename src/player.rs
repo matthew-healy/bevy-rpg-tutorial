@@ -37,7 +37,7 @@ pub struct EncounterTracker {
 pub struct Player {
     speed: f32,
     // TODO: is it enough to only run movement when we're in the Overworld state?
-    active: bool,
+    pub active: bool,
     pub experience: usize,
 }
 
