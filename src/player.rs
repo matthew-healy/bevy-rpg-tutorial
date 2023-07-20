@@ -1,7 +1,7 @@
 use bevy::{prelude::*, sprite::collide_aabb::collide};
 
 use crate::{
-    ascii, combat, fadeout,
+    ascii, combat, fadeout, graphics,
     tilemap::{self, EncounterSpawner},
     util::hide,
     GameState, TILE_SIZE,
@@ -41,13 +41,35 @@ pub struct Player {
     pub experience: usize,
 }
 
+pub enum LevelUpResult {
+    NoChange,
+    LevelUp,
+}
+
+impl Player {
+    pub fn give_exp(&mut self, experience: usize, stats: &mut combat::Stats) -> LevelUpResult {
+        self.experience += experience;
+        if self.experience >= 50 {
+            stats.health += 2;
+            stats.max_health += 2;
+            stats.attack += 1;
+            stats.defense += 1;
+            self.experience -= 50;
+
+            LevelUpResult::LevelUp
+        } else {
+            LevelUpResult::NoChange
+        }
+    }
+}
+
 fn movement(
-    mut player_query: Query<(&Player, &mut Transform)>,
+    mut player_query: Query<(&Player, &mut Transform, &mut graphics::PlayerDirection)>,
     wall_query: Query<&Transform, (With<tilemap::Collider>, Without<Player>)>,
     keyboard: Res<Input<KeyCode>>,
     time: Res<Time>,
 ) {
-    let (player, mut transform) = player_query.single_mut();
+    let (player, mut transform, mut direction) = player_query.single_mut();
 
     if !player.active {
         return;
@@ -71,19 +93,29 @@ fn movement(
         x_delta += normalised_movement;
     }
 
-    let target = transform.translation + Vec3::new(x_delta, 0., 0.);
-    if !wall_query
-        .iter()
-        .any(|&wall| would_collide(target, wall.translation))
-    {
-        transform.translation = target;
-    }
-
     let target = transform.translation + Vec3::new(0., y_delta, 0.);
     if !wall_query
         .iter()
         .any(|&wall| would_collide(target, wall.translation))
     {
+        if y_delta > 0. {
+            direction.0 = graphics::Direction::Up;
+        } else if y_delta < 0. {
+            direction.0 = graphics::Direction::Down;
+        }
+        transform.translation = target;
+    }
+
+    let target = transform.translation + Vec3::new(x_delta, 0., 0.);
+    if !wall_query
+        .iter()
+        .any(|&wall| would_collide(target, wall.translation))
+    {
+        if x_delta > 0. {
+            direction.0 = graphics::Direction::Right;
+        } else if x_delta < 0. {
+            direction.0 = graphics::Direction::Left;
+        }
         transform.translation = target;
     }
 }
@@ -126,18 +158,27 @@ fn show_player(mut query: Query<(&mut Player, &mut Visibility)>) {
     }
 }
 
-fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {
-    let player = ascii::spawn_sprite(
-        &mut commands,
-        ascii.as_ref(),
-        1,
-        Color::rgb(0.3, 0.3, 0.9),
-        Vec3::new(2. * TILE_SIZE, -2. * TILE_SIZE, 900.),
-        Vec3::splat(1.),
-    );
-
+fn spawn(mut commands: Commands, characters: Res<graphics::CharacterSheet>) {
+    let initial_direction = graphics::Direction::Down;
+    let initial_frames = characters.player_frames.get(&initial_direction).unwrap();
     commands
-        .entity(player)
+        // TODO: DirectionalAnimationBundle to configure all movement-related stuff?
+        .spawn(SpriteSheetBundle {
+            sprite: TextureAtlasSprite {
+                index: initial_frames[0],
+                custom_size: Some(Vec2::splat(TILE_SIZE)),
+                ..Default::default()
+            },
+            transform: Transform::from_xyz(2. * TILE_SIZE, -2. * TILE_SIZE, 900.),
+            texture_atlas: characters.handle.clone(),
+            ..Default::default()
+        })
+        .insert(graphics::FrameAnimation {
+            timer: Timer::from_seconds(0.2, TimerMode::Repeating),
+            frames: initial_frames.to_vec(),
+            current_frame: 0,
+        })
+        .insert(graphics::PlayerDirection(initial_direction))
         .insert(Name::new("Player"))
         .insert(Player {
             speed: 3.,
@@ -153,19 +194,6 @@ fn spawn(mut commands: Commands, ascii: Res<ascii::Sheet>) {
         .insert(EncounterTracker {
             timer: Timer::from_seconds(1., TimerMode::Repeating),
         });
-
-    let background = ascii::spawn_sprite(
-        &mut commands,
-        ascii.as_ref(),
-        0,
-        Color::rgb(0.5, 0.5, 0.5),
-        Vec3::new(0., 0., -1.),
-        Vec3::splat(1.),
-    );
-
-    commands.entity(background).insert(Name::new("Background"));
-
-    commands.entity(player).push_children(&[background]);
 }
 
 fn camera_follow(

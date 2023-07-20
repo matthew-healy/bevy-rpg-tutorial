@@ -5,7 +5,7 @@ use strum::EnumCount;
 use crate::{
     ascii, fadeout,
     graphics::{self, CharacterSheet},
-    player::Player,
+    player::{self, Player},
     GameState, RESOLUTION, TILE_SIZE,
 };
 
@@ -365,7 +365,11 @@ fn despawn_text(mut commands: Commands, query: Query<Entity, With<Text>>) {
     }
 }
 
-fn reward(mut commands: Commands, ascii: Res<ascii::Sheet>, mut player_query: Query<&mut Player>) {
+fn reward(
+    mut commands: Commands,
+    ascii: Res<ascii::Sheet>,
+    mut player_query: Query<(&mut Player, &mut Stats)>,
+) {
     let exp_reward = 10;
     let reward_text = format!("Earned {} exp", exp_reward);
     let text = ascii::spawn_text(
@@ -375,7 +379,24 @@ fn reward(mut commands: Commands, ascii: Res<ascii::Sheet>, mut player_query: Qu
         Vec3::new(-((reward_text.len() / 2) as f32 * TILE_SIZE), 0., 0.),
     );
     commands.entity(text).insert(Text);
-    player_query.single_mut().experience += exp_reward;
+    let (mut player, mut stats) = player_query.single_mut();
+    match player.give_exp(exp_reward, &mut stats) {
+        player::LevelUpResult::NoChange => (),
+        player::LevelUpResult::LevelUp => {
+            let lvl_up_text = "Level up!";
+            let text = ascii::spawn_text(
+                &mut commands,
+                &ascii,
+                &lvl_up_text,
+                Vec3::new(
+                    -((lvl_up_text.len() / 2) as f32 * TILE_SIZE),
+                    -1.5 * TILE_SIZE,
+                    0.,
+                ),
+            );
+            commands.entity(text).insert(Text);
+        }
+    }
 }
 
 fn accept_reward(

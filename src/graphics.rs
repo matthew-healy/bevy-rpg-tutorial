@@ -1,25 +1,38 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashMap};
 
 pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PreStartup, load)
-            .add_systems(Update, animate);
+            .add_systems(PostUpdate, animate)
+            .add_systems(Update, update_player);
     }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
 }
 
 #[derive(Resource)]
 pub struct CharacterSheet {
-    handle: Handle<TextureAtlas>,
+    pub handle: Handle<TextureAtlas>,
+    pub player_frames: HashMap<Direction, [usize; 3]>,
     bat_frames: [usize; 3],
 }
 
 #[derive(Component)]
+pub struct PlayerDirection(pub Direction);
+
+#[derive(Component)]
 pub struct FrameAnimation {
-    timer: Timer,
-    frames: Vec<usize>,
-    current_frame: usize,
+    pub timer: Timer,
+    pub frames: Vec<usize>,
+    pub current_frame: usize,
 }
 
 impl FrameAnimation {
@@ -68,10 +81,47 @@ fn load(
         TextureAtlas::from_grid(image, Vec2::splat(16.), 12, 8, Some(Vec2::splat(2.)), None);
     let handle = texture_atlases.add(atlas);
 
+    let columns = 12;
+
+    let player_frames = {
+        let mut f = HashMap::new();
+        f.insert(
+            Direction::Down,
+            [columns * 0 + 0, columns * 0 + 1, columns * 0 + 2],
+        );
+        f.insert(
+            Direction::Left,
+            [columns * 1 + 0, columns * 1 + 1, columns * 1 + 2],
+        );
+        f.insert(
+            Direction::Right,
+            [columns * 2 + 0, columns * 2 + 1, columns * 2 + 2],
+        );
+        f.insert(
+            Direction::Up,
+            [columns * 3 + 0, columns * 3 + 1, columns * 3 + 2],
+        );
+        f
+    };
+
     commands.insert_resource(CharacterSheet {
         handle,
+        player_frames,
         bat_frames: [12 * 4 + 3, 12 * 4 + 4, 12 * 4 + 5],
     });
+}
+
+fn update_player(
+    mut sprites: Query<(&PlayerDirection, &mut FrameAnimation), Changed<PlayerDirection>>,
+    characters: Res<CharacterSheet>,
+) {
+    for (direction, mut animation) in sprites.iter_mut() {
+        animation.frames = characters
+            .player_frames
+            .get(&direction.0)
+            .expect("animations for each direction are inserted in `load`")
+            .to_vec();
+    }
 }
 
 fn animate(
