@@ -1,5 +1,7 @@
 use bevy::{prelude::*, utils::HashMap};
 
+use crate::combat;
+
 pub struct Plugin;
 
 impl bevy::prelude::Plugin for Plugin {
@@ -22,7 +24,17 @@ pub enum Direction {
 pub struct CharacterSheet {
     pub handle: Handle<TextureAtlas>,
     pub player_frames: HashMap<Direction, [usize; 3]>,
-    bat_frames: [usize; 3],
+    pub enemy_frames: HashMap<combat::EnemyType, [usize; 3]>,
+}
+
+impl CharacterSheet {
+    pub fn get_player_frames(&self, direction: &Direction) -> &[usize; 3] {
+        self.player_frames.get(direction).unwrap()
+    }
+
+    pub fn get_enemy_frames(&self, typ: &combat::EnemyType) -> &[usize; 3] {
+        self.enemy_frames.get(typ).unwrap()
+    }
 }
 
 #[derive(Component)]
@@ -45,12 +57,13 @@ impl FrameAnimation {
     }
 }
 
-pub fn spawn_bat(
+pub fn spawn_enemy(
     commands: &mut Commands,
+    typ: &combat::EnemyType,
     characters: &CharacterSheet,
     translation: Vec3,
 ) -> Entity {
-    let mut sprite = TextureAtlasSprite::new(characters.bat_frames[0]);
+    let mut sprite = TextureAtlasSprite::new(characters.get_enemy_frames(typ)[0]);
     sprite.custom_size = Some(Vec2::splat(0.5));
 
     commands
@@ -65,7 +78,7 @@ pub fn spawn_bat(
         })
         .insert(FrameAnimation {
             timer: Timer::from_seconds(0.2, TimerMode::Repeating),
-            frames: characters.bat_frames.to_vec(),
+            frames: characters.get_enemy_frames(typ).to_vec(),
             current_frame: 0,
         })
         .id()
@@ -77,29 +90,47 @@ fn load(
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = assets.load("characters.png");
-    let atlas =
-        TextureAtlas::from_grid(image, Vec2::splat(16.), 12, 8, Some(Vec2::splat(2.)), None);
-    let handle = texture_atlases.add(atlas);
-
     let columns = 12;
+    let atlas = TextureAtlas::from_grid(
+        image,
+        Vec2::splat(16.),
+        columns,
+        8,
+        Some(Vec2::splat(2.)),
+        None,
+    );
+    let handle = texture_atlases.add(atlas);
 
     let player_frames = {
         let mut f = HashMap::new();
         f.insert(
             Direction::Down,
-            [columns * 0 + 0, columns * 0 + 1, columns * 0 + 2],
+            [columns * 0 + 6, columns * 0 + 7, columns * 0 + 8],
         );
         f.insert(
             Direction::Left,
-            [columns * 1 + 0, columns * 1 + 1, columns * 1 + 2],
+            [columns * 1 + 6, columns * 1 + 7, columns * 1 + 8],
         );
         f.insert(
             Direction::Right,
-            [columns * 2 + 0, columns * 2 + 1, columns * 2 + 2],
+            [columns * 2 + 6, columns * 2 + 7, columns * 2 + 8],
         );
         f.insert(
             Direction::Up,
-            [columns * 3 + 0, columns * 3 + 1, columns * 3 + 2],
+            [columns * 3 + 6, columns * 3 + 7, columns * 3 + 8],
+        );
+        f
+    };
+
+    let enemy_frames = {
+        let mut f = HashMap::new();
+        f.insert(
+            combat::EnemyType::Bat,
+            [columns * 4 + 3, columns * 4 + 4, columns * 4 + 5],
+        );
+        f.insert(
+            combat::EnemyType::Ghost,
+            [columns * 4 + 6, columns * 4 + 7, columns * 4 + 8],
         );
         f
     };
@@ -107,7 +138,7 @@ fn load(
     commands.insert_resource(CharacterSheet {
         handle,
         player_frames,
-        bat_frames: [12 * 4 + 3, 12 * 4 + 4, 12 * 4 + 5],
+        enemy_frames,
     });
 }
 

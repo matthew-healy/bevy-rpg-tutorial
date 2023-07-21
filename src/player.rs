@@ -160,7 +160,7 @@ fn show_player(mut query: Query<(&mut Player, &mut Visibility)>) {
 
 fn spawn(mut commands: Commands, characters: Res<graphics::CharacterSheet>) {
     let initial_direction = graphics::Direction::Down;
-    let initial_frames = characters.player_frames.get(&initial_direction).unwrap();
+    let initial_frames = characters.get_player_frames(&initial_direction);
     commands
         // TODO: DirectionalAnimationBundle to configure all movement-related stuff?
         .spawn(SpriteSheetBundle {

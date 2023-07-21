@@ -63,8 +63,36 @@ impl bevy::prelude::Plugin for Plugin {
     }
 }
 
+#[derive(PartialEq, Eq, Hash)]
+pub enum EnemyType {
+    Bat,
+    Ghost,
+}
+
+impl EnemyType {
+    fn name(&self) -> &str {
+        use EnemyType::*;
+
+        match self {
+            Bat => "Bat",
+            Ghost => "Ghost",
+        }
+    }
+
+    fn exp_reward(&self) -> usize {
+        use EnemyType::*;
+
+        match self {
+            Bat => 10,
+            Ghost => 30,
+        }
+    }
+}
+
 #[derive(Component)]
-struct Enemy;
+struct Enemy {
+    typ: EnemyType,
+}
 
 #[derive(bevy::prelude::Event)]
 pub struct Event {
@@ -300,28 +328,52 @@ fn attack_effects(
 struct Text;
 
 fn spawn_enemy(mut commands: Commands, ascii: Res<ascii::Sheet>, characters: Res<CharacterSheet>) {
-    let enemy_health = 3;
+    let typ = select_enemy_type();
+    let stats = stats_for_enemy_type(&typ);
+    let name = typ.name().to_string();
+
     let health_text = ascii::spawn_text(
         &mut commands,
         &ascii,
-        &format!("Health: {}", enemy_health),
+        &format!("Health: {}", stats.health),
         Vec3::new(-4.5 * TILE_SIZE, 0.5, 100.),
     );
     commands.entity(health_text).insert(Text);
 
-    let sprite = graphics::spawn_bat(&mut commands, &characters, Vec3::new(0., 0.3, 100.));
+    let sprite = graphics::spawn_enemy(&mut commands, &typ, &characters, Vec3::new(0., 0.3, 100.));
 
     commands
         .entity(sprite)
-        .insert(Enemy)
-        .insert(Stats {
+        .insert(Enemy { typ })
+        .insert(stats)
+        .insert(Name::new(name))
+        .add_child(health_text);
+}
+
+fn stats_for_enemy_type(typ: &EnemyType) -> Stats {
+    match typ {
+        EnemyType::Bat => Stats {
             health: 3,
             max_health: 3,
             attack: 2,
             defense: 1,
-        })
-        .insert(Name::new("Bat"))
-        .add_child(health_text);
+        },
+        EnemyType::Ghost => Stats {
+            health: 5,
+            max_health: 5,
+            attack: 3,
+            defense: 2,
+        },
+    }
+}
+
+fn select_enemy_type() -> EnemyType {
+    let p = rand::random::<f32>();
+    if p < 0.5 {
+        EnemyType::Bat
+    } else {
+        EnemyType::Ghost
+    }
 }
 
 fn despawn_enemy(mut commands: Commands, query: Query<Entity, With<Enemy>>) {
@@ -369,8 +421,10 @@ fn reward(
     mut commands: Commands,
     ascii: Res<ascii::Sheet>,
     mut player_query: Query<(&mut Player, &mut Stats)>,
+    enemy_query: Query<&Enemy>,
 ) {
-    let exp_reward = 10;
+    let enemy = enemy_query.single();
+    let exp_reward = enemy.typ.exp_reward();
     let reward_text = format!("Earned {} exp", exp_reward);
     let text = ascii::spawn_text(
         &mut commands,
